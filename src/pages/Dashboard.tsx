@@ -41,8 +41,8 @@ export function Dashboard() {
     <div className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">{prettyDate(data.today)}</p>
-          <h1>{me.company.name}</h1>
+          <p className="eyebrow">{me.company.name} · {prettyDate(data.today)}</p>
+          <h1>Dashboard</h1>
           <p className="lede">
             {data.holidayName
               ? `${data.holidayName} — the studio is closed.`
@@ -56,7 +56,7 @@ export function Dashboard() {
           </p>
         </div>
         <Link className="primary button-link" to="/attendance">
-          Open the register
+          Open attendance
         </Link>
       </header>
       <PunchCard layout="strip" />

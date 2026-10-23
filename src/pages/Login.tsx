@@ -38,15 +38,15 @@ export function Login() {
       <section className="login-story">
         <div>
           <Mark size={36} />
-          <p className="eyebrow">Park Street · Kolkata</p>
-          <h1>Marigold</h1>
-          <p>The payroll book for Meridian Goods. People, time, leave, and pay, in one register.</p>
-          <ol className="login-index">
-            <li><span>01</span> Directory</li>
-            <li><span>02</span> Attendance</li>
-            <li><span>03</span> Leave</li>
-            <li><span>04</span> Payroll</li>
-          </ol>
+          <p className="eyebrow">Meridian Goods</p>
+          <h1>Marigold HRMS</h1>
+          <p>Employees, attendance, leave, and payroll in one workspace.</p>
+          <ul className="login-index">
+            <li>Employee directory</li>
+            <li>Geofenced attendance</li>
+            <li>Leave approvals</li>
+            <li>Payroll and payslips</li>
+          </ul>
         </div>
         <p className="letterfoot">
           Meridian Goods Pvt Ltd
@@ -96,7 +96,7 @@ export function Login() {
             </p>
           ) : null}
           <button className="primary" type="submit" disabled={busy}>
-            {busy ? "Checking…" : "Enter Marigold"}
+            {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </section>
