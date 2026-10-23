@@ -39,13 +39,13 @@ export function Login() {
         <div>
           <Mark size={36} />
           <p className="eyebrow">Meridian Goods</p>
-          <h1>The people desk</h1>
-          <p>Directory, geofenced attendance, leave, and payroll for Meridian Goods — one set of books.</p>
+          <h1>The people desk, with a brief.</h1>
+          <p>Directory, geofenced attendance, leave, and payroll. Ask the brief about the books — it answers from Meridian’s records.</p>
           <ul className="login-index">
-            <li>Employee directory and compensation</li>
+            <li>Ask who is unmarked, or what pay you can see</li>
+            <li>Signals for leave, payroll, and the next holiday</li>
             <li>Park Street geofence, 150 metres</li>
-            <li>Leave approvals by manager</li>
-            <li>Payroll through payslip</li>
+            <li>Command palette for people and desks</li>
           </ul>
         </div>
         <p className="letterfoot">

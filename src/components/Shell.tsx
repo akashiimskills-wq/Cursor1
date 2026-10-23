@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { fullName, useAuth } from "../auth";
 import { prettyDate, roleLabel } from "../format";
+import { AssistantDock } from "./AssistantDock";
 import { Avatar } from "./Avatar";
+import { CommandPalette } from "./CommandPalette";
 import { Mark } from "./Mark";
 
 const links = [
@@ -17,7 +19,22 @@ const links = [
 export function Shell() {
   const { me, loading, signOut } = useAuth();
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
+  const [palette, setPalette] = useState(false);
+  const [dockOpen, setDockOpen] = useState(() => window.matchMedia("(min-width: 1181px)").matches);
+  const [seed, setSeed] = useState<string | null>(null);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPalette(true);
+      } else if (event.key === "Escape") {
+        setPalette(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   if (loading) return <p className="boot">Opening Marigold…</p>;
   if (!me) return <Navigate to="/login" replace />;
@@ -37,7 +54,7 @@ export function Shell() {
           <Mark size={28} />
           <div>
             <strong>Marigold</strong>
-            <span>People desk</span>
+            <span>Brief</span>
           </div>
         </div>
         <nav>
@@ -70,25 +87,14 @@ export function Shell() {
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <form
-            className="finder"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const term = query.trim();
-              navigate(term ? `/people?q=${encodeURIComponent(term)}` : "/people");
-            }}
-          >
-            <label className="sr" htmlFor="finder">
-              Find an employee
-            </label>
-            <input
-              id="finder"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Find an employee, code, or email"
-            />
-          </form>
+          <button className="command" type="button" onClick={() => setPalette(true)}>
+            <span>Search or ask the brief</span>
+            <kbd>⌘K</kbd>
+          </button>
           <div className="topbar-meta">
+            <button className="ghost" type="button" onClick={() => setDockOpen((current) => !current)}>
+              {dockOpen ? "Hide brief" : "Open brief"}
+            </button>
             <span className={`env-chip ${me.env}`}>{me.env}</span>
             <div>
               <strong>{me.company.legalName}</strong>
@@ -100,7 +106,21 @@ export function Shell() {
           <Outlet />
         </main>
       </div>
-    </div>
+      <AssistantDock
+        open={dockOpen}
+        seed={seed}
+        onSeedDone={() => setSeed(null)}
+        onClose={() => setDockOpen(false)}
+      />
+      </div>
+      <CommandPalette
+        open={palette}
+        onClose={() => setPalette(false)}
+        onAsk={(question) => {
+          setDockOpen(true);
+          setSeed(question);
+        }}
+      />
     </div>
   );
 }

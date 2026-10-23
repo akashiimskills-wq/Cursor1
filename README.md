@@ -4,6 +4,8 @@ Marigold is the HRMS for Meridian Goods, a product studio in Kolkata. It covers 
 
 Check-in and check-out read the browser’s location once, at the punch. The punch is accepted within 150 m of the Park Street studio. A day already marked work-from-home is exempt. Location is not tracked between punches.
 
+The Marigold brief answers questions from these records: headcount, today’s register, leave, holidays, anniversaries, and pay the signed-in person is allowed to see. It does not call an external model, and it will not reveal another person’s compensation, PAN, or bank details. Open it with the brief column, or with Ctrl K / ⌘K.
+
 Payroll is calculated in integer paise:
 
 - Earnings are prorated for days actually in service and for loss of pay.

@@ -344,3 +344,44 @@ test("health reports staging and production desks", () => {
   if (previous === undefined) delete process.env.HRMS_ENV;
   else process.env.HRMS_ENV = previous;
 });
+
+test("the brief answers from the books and hides other people's pay", () => {
+  const admin = signIn("priya.shah@meridian.example");
+  const brief = call("GET", "/api/assistant/brief", { cookie: admin });
+  assert.equal(brief.status, 200);
+  assert.ok(brief.json.insights.length >= 2);
+  assert.ok(brief.json.prompts.includes("What is the company net pay?"));
+
+  const head = call("POST", "/api/assistant", { cookie: admin, body: { message: "How many people are on the books?" } });
+  assert.equal(head.status, 200);
+  assert.match(head.json.reply, /people are on the books/);
+  assert.ok(Number(head.json.reply.match(/\d+/)[0]) >= 10);
+
+  const pay = call("POST", "/api/assistant", { cookie: admin, body: { message: "What is the company net pay?" } });
+  assert.equal(pay.json.tone, "answer");
+  assert.match(pay.json.reply, /₹/);
+  assert.match(pay.json.reply, /paid/i);
+
+  const leelaPay = call("POST", "/api/assistant", { cookie: admin, body: { message: "What is Leela Nair's salary?" } });
+  assert.match(leelaPay.json.reply, /Leela Nair/);
+  assert.match(leelaPay.json.reply, /₹/);
+
+  const employee = signIn("leela.nair@meridian.example");
+  const hidden = call("POST", "/api/assistant", { cookie: employee, body: { message: "What is Devika's salary?" } });
+  assert.equal(hidden.json.tone, "guard");
+  assert.doesNotMatch(hidden.json.reply, /₹/);
+
+  const own = call("POST", "/api/assistant", { cookie: employee, body: { message: "What is my net pay?" } });
+  assert.match(own.json.reply, /₹/);
+
+  const manager = signIn("arjun.mehta@meridian.example");
+  const company = call("POST", "/api/assistant", { cookie: manager, body: { message: "What is the company net pay?" } });
+  assert.equal(company.json.tone, "guard");
+  assert.doesNotMatch(company.json.reply, /₹/);
+
+  const holiday = call("POST", "/api/assistant", { cookie: manager, body: { message: "When is the next holiday?" } });
+  assert.match(holiday.json.reply, /Diwali|Christmas|holiday/i);
+
+  assert.equal(call("POST", "/api/assistant", { cookie: manager, body: { message: "   " } }).status, 400);
+  assert.equal(call("GET", "/api/assistant/brief").status, 401);
+});

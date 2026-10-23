@@ -1,6 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { buildRun, employeesInPayroll, getDb, holidayDates, structureFromRow, writePayslips } from "./db.mjs";
 import { distanceMetres } from "./geo.mjs";
+import { assistantAnswer, assistantBrief } from "./assistant.mjs";
 import { addDays, businessDaysInRange, businessToday, isWeekend } from "./payroll.mjs";
 
 export const COMPANY = {
@@ -104,6 +105,8 @@ const routes = [
   { method: "POST", path: "/api/logout", handler: logout },
   { method: "GET", path: "/api/me", handler: me },
   { method: "GET", path: "/api/dashboard", handler: dashboard },
+  { method: "GET", path: "/api/assistant/brief", handler: briefAssistant },
+  { method: "POST", path: "/api/assistant", handler: askAssistant },
   { method: "GET", path: "/api/departments", handler: departments },
   { method: "GET", path: "/api/positions", handler: positions },
   { method: "GET", path: "/api/employees", handler: listEmployees },
@@ -168,6 +171,19 @@ function mePayload(user) {
     today: businessToday(),
     env: releaseEnv(),
   };
+}
+
+function briefAssistant({ db, user }) {
+  requireUser(user);
+  return assistantBrief(db, user);
+}
+
+function askAssistant({ db, user, body }) {
+  requireUser(user);
+  const message = String(body?.message ?? "").trim();
+  if (!message) throw new HttpError(400, "Ask a question about the books.");
+  if (message.length > 500) throw new HttpError(400, "Keep the question under 500 characters.");
+  return assistantAnswer(db, user, message);
 }
 
 function dashboard({ db, user }) {

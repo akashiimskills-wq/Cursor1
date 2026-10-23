@@ -18,6 +18,7 @@ type WeekDay = {
 };
 
 type Activity = { at: string; kind: string; title: string; detail: string };
+type Insight = { id: string; tone: string; title: string; detail: string; href: string };
 
 type DashboardData = {
   today: string;
@@ -43,22 +44,27 @@ type DashboardData = {
 export function Dashboard() {
   const { me } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [insights, setInsights] = useState<Insight[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
     api<DashboardData>("/api/dashboard")
       .then(setData)
       .catch((caught) => setError(caught.message));
+    api<{ insights: Insight[] }>("/api/assistant/brief")
+      .then((brief) => setInsights(brief.insights))
+      .catch(() => setInsights([]));
   }, []);
 
   if (error) return <p className="banner">{error}</p>;
   if (!data || !me) return <p className="boot">Gathering today’s figures…</p>;
   const headlinePay = me.user.role === "admin" ? data.payroll : data.ownPay;
   const scale = Math.max(data.headcount, 1);
+  const coverage = data.workingDay ? data.present / Math.max(data.present + data.absent + data.unmarked, 1) : null;
 
   return (
     <div className="page">
-      <header className="page-head">
+      <header className="page-head hero">
         <div>
           <p className="eyebrow">{me.company.legalName} · {prettyDate(data.today)}</p>
           <h1>
@@ -70,6 +76,17 @@ export function Dashboard() {
           Attendance desk
         </Link>
       </header>
+      {insights.length > 0 ? (
+        <section className="signals" aria-label="Brief signals">
+          {insights.slice(0, 3).map((insight) => (
+            <Link key={insight.id} to={insight.href} className={`signal ${insight.tone}`}>
+              <span>Brief</span>
+              <strong>{insight.title}</strong>
+              <em>{insight.detail}</em>
+            </Link>
+          ))}
+        </section>
+      ) : null}
       <PunchCard layout="strip" />
 
       <section className="stats">
@@ -105,9 +122,7 @@ export function Dashboard() {
         <section className="card">
           <div className="card-head">
             <h2>Seven-day attendance</h2>
-            <span className="legend">
-              <i className="swatch present" /> Present <i className="swatch absent" /> Absent
-            </span>
+            <Coverage value={coverage} />
           </div>
           <div className="week">
             {data.week.map((day) => (
@@ -226,6 +241,21 @@ export function Dashboard() {
         </section>
       </div>
       <p className="footnote">Paid days on a slip are working days minus loss of pay. {dayCount(1)} of unpaid leave counts as absence.</p>
+    </div>
+  );
+}
+
+function Coverage({ value }: { value: number | null }) {
+  const amount = value ?? 0;
+  const radius = 18;
+  const circ = 2 * Math.PI * radius;
+  return (
+    <div className="coverage" aria-label={value == null ? "Studio closed" : `${Math.round(amount * 100)} percent marked in`}>
+      <svg viewBox="0 0 44 44" width="44" height="44">
+        <circle cx="22" cy="22" r={radius} />
+        <circle cx="22" cy="22" r={radius} strokeDasharray={circ} strokeDashoffset={circ * (1 - amount)} />
+      </svg>
+      <span>{value == null ? "Closed" : `${Math.round(amount * 100)}%`}</span>
     </div>
   );
 }
