@@ -175,14 +175,23 @@ function dashboard({ db, user }) {
     )
     .get(user.employee_id, user.role).count;
   const latest = db.prepare("SELECT * FROM payroll_runs ORDER BY year DESC, month DESC LIMIT 1").get();
-  const latestTotals = latest
-    ? db
-        .prepare(
-          `SELECT COUNT(*) AS people, COALESCE(SUM(gross_payable), 0) AS gross, COALESCE(SUM(net_pay), 0) AS net
-           FROM payslips WHERE payroll_run_id = ?`,
-        )
-        .get(latest.id)
-    : null;
+  const latestTotals =
+    user.role === "admin" && latest
+      ? db
+          .prepare(
+            `SELECT COUNT(*) AS people, COALESCE(SUM(gross_payable), 0) AS gross, COALESCE(SUM(net_pay), 0) AS net
+             FROM payslips WHERE payroll_run_id = ?`,
+          )
+          .get(latest.id)
+      : null;
+  const ownSlip = db
+    .prepare(
+      `SELECT p.id, r.year, r.month, r.status, p.net_pay AS net
+       FROM payslips p JOIN payroll_runs r ON r.id = p.payroll_run_id
+       WHERE p.employee_id = ?
+       ORDER BY r.year DESC, r.month DESC LIMIT 1`,
+    )
+    .get(user.employee_id);
   const month = today.slice(5, 7);
   const anniversaries = db
     .prepare(
@@ -206,16 +215,20 @@ function dashboard({ db, user }) {
     unmarked,
     pendingLeave: user.role === "employee" ? 0 : pendingLeave,
     approvalsWaiting: user.role === "employee" ? 0 : minePending,
-    payroll: latest
-      ? {
-          id: latest.id,
-          year: latest.year,
-          month: latest.month,
-          status: latest.status,
-          people: latestTotals.people,
-          gross: latestTotals.gross,
-          net: latestTotals.net,
-        }
+    payroll:
+      user.role === "admin" && latest
+        ? {
+            id: latest.id,
+            year: latest.year,
+            month: latest.month,
+            status: latest.status,
+            people: latestTotals.people,
+            gross: latestTotals.gross,
+            net: latestTotals.net,
+          }
+        : null,
+    ownPay: ownSlip
+      ? { id: ownSlip.id, year: ownSlip.year, month: ownSlip.month, status: ownSlip.status, net: ownSlip.net }
       : null,
     anniversaries: anniversaries.map((row) => ({
       id: row.id,
@@ -268,7 +281,7 @@ function listEmployees({ db, user, query }) {
     params.push(query.status);
   }
   const rows = db.prepare(`${employeeSelect()} WHERE ${filters.join(" AND ")} ORDER BY e.code`).all(...params);
-  return { employees: rows.map((row) => publicEmployee(row)) };
+  return { employees: rows.map((row) => publicEmployee(row, user)) };
 }
 
 function createEmployee({ db, user, body }) {
@@ -329,12 +342,12 @@ function createEmployee({ db, user, body }) {
     ).run(input.email, hash, salt, employeeId);
     createdLogin = true;
   }
-  return { employee: employeeById(db, employeeId), createdLogin, temporaryPassword: createdLogin ? "marigold-demo" : null };
+  return { employee: employeeById(db, employeeId, user), createdLogin, temporaryPassword: createdLogin ? "marigold-demo" : null };
 }
 
 function getEmployee({ db, user, params }) {
   requireUser(user);
-  const employee = employeeById(db, params.id);
+  const employee = employeeById(db, params.id, user);
   if (!employee) throw new HttpError(404, "Employee not found.");
   const reports = db
     .prepare(
@@ -401,7 +414,7 @@ function patchEmployee({ db, user, params, body }) {
     input.pan,
     params.id,
   );
-  return { employee: employeeById(db, params.id) };
+  return { employee: employeeById(db, params.id, user) };
 }
 
 function putCompensation({ db, user, params, body }) {
@@ -443,7 +456,7 @@ function getAttendance({ db, user, query }) {
   );
   const entries = rows
     .filter((row) => user.role !== "employee" || row.id === user.employee_id)
-    .map((row) => ({ employee: publicEmployee(row), status: marks.get(row.id) ?? null }));
+    .map((row) => ({ employee: publicEmployee(row, user), status: marks.get(row.id) ?? null }));
   return { date, workingDay: !isWeekend(date) && !holiday, holidayName: holiday?.name ?? null, entries };
 }
 
@@ -894,12 +907,13 @@ function publicLeave(row) {
   };
 }
 
-function employeeById(db, id) {
+function employeeById(db, id, user) {
   const row = db.prepare(`${employeeSelect()} WHERE e.id = ?`).get(id);
-  return row ? publicEmployee(row) : null;
+  return row ? publicEmployee(row, user) : null;
 }
 
-function publicEmployee(row) {
+function publicEmployee(row, user) {
+  const sensitive = user.role === "admin" || user.employee_id === row.id;
   return {
     id: row.id,
     code: row.code,
@@ -919,9 +933,9 @@ function publicEmployee(row) {
     status: row.status,
     employmentType: row.employment_type,
     city: row.city,
-    bankName: row.bank_name,
-    bankLast4: row.bank_last4,
-    panMasked: maskPan(row.pan),
+    bankName: sensitive ? row.bank_name : null,
+    bankLast4: sensitive ? row.bank_last4 : null,
+    panMasked: sensitive ? maskPan(row.pan) : null,
   };
 }
 

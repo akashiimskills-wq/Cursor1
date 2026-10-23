@@ -42,9 +42,9 @@ export type Employee = {
   status: "active" | "on_leave" | "exited";
   employmentType: "full_time" | "contract";
   city: string;
-  bankName: string;
-  bankLast4: string;
-  panMasked: string;
+  bankName: string | null;
+  bankLast4: string | null;
+  panMasked: string | null;
 };
 
 export type Compensation = {

@@ -63,9 +63,16 @@ test("dashboard, people search, and salary privacy", () => {
   const employee = signIn("leela.nair@meridian.example");
   const own = call("GET", `/api/employees/${leela.id}`, { cookie: employee });
   assert.ok(own.json.compensation);
+  assert.ok(own.json.employee.panMasked);
   const devika = call("GET", "/api/employees?q=devika", { cookie: employee });
   const hidden = call("GET", `/api/employees/${devika.json.employees[0].id}`, { cookie: employee });
   assert.equal(hidden.json.compensation, null);
+  assert.equal(hidden.json.employee.panMasked, null);
+  assert.equal(hidden.json.employee.bankLast4, null);
+  assert.equal(hidden.json.employee.bankName, null);
+  const employeeDash = call("GET", "/api/dashboard", { cookie: employee });
+  assert.equal(employeeDash.json.payroll, null);
+  assert.ok(employeeDash.json.ownPay.net > 0);
   assert.equal(call("GET", "/api/payroll/runs", { cookie: employee }).status, 403);
 });
 

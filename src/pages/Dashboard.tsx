@@ -16,6 +16,7 @@ type DashboardData = {
   pendingLeave: number;
   approvalsWaiting: number;
   payroll: { id: number; year: number; month: number; status: string; people: number; gross: number; net: number } | null;
+  ownPay: { id: number; year: number; month: number; status: string; net: number } | null;
   anniversaries: { id: number; name: string; code: string; hireDate: string; years: number }[];
   upcomingHolidays: { id: number; date: string; name: string }[];
 };
@@ -33,6 +34,7 @@ export function Dashboard() {
 
   if (error) return <p className="banner">{error}</p>;
   if (!data || !me) return <p className="boot">Gathering today’s figures…</p>;
+  const headlinePay = me.user.role === "admin" ? data.payroll : data.ownPay;
 
   return (
     <div className="page">
@@ -74,12 +76,14 @@ export function Dashboard() {
           <em>{me.user.role === "employee" ? "Your requests live under Leave" : `${data.pendingLeave} open in the company`}</em>
         </article>
         <article>
-          <span>Latest net pay</span>
-          <strong>{data.payroll ? inr(data.payroll.net) : "—"}</strong>
+          <span>{me.user.role === "admin" ? "Company net pay" : "Your net pay"}</span>
+          <strong>{headlinePay ? inr(headlinePay.net) : "—"}</strong>
           <em>
-            {data.payroll
+            {me.user.role === "admin" && data.payroll
               ? `${monthLabel(data.payroll.year, data.payroll.month)} · ${statusLabel(data.payroll.status)}`
-              : "No payroll yet"}
+              : data.ownPay
+                ? `${monthLabel(data.ownPay.year, data.ownPay.month)} · ${statusLabel(data.ownPay.status)}`
+                : "No payslip yet"}
           </em>
         </article>
       </section>
@@ -121,13 +125,18 @@ export function Dashboard() {
             <h2>Payroll</h2>
             {me.user.role === "admin" && data.payroll ? <Link to={`/payroll/${data.payroll.id}`}>Open run</Link> : null}
           </div>
-          {data.payroll ? (
+          {me.user.role === "admin" && data.payroll ? (
             <p>
               {monthLabel(data.payroll.year, data.payroll.month)} covers {data.payroll.people} people. Gross{" "}
               {inr(data.payroll.gross)}, net {inr(data.payroll.net)}. The run is {data.payroll.status}.
             </p>
+          ) : me.user.role !== "admin" && data.ownPay ? (
+            <p>
+              Your {monthLabel(data.ownPay.year, data.ownPay.month)} slip is {data.ownPay.status}. Net pay is {inr(data.ownPay.net)}.{" "}
+              <Link to={`/payslips/${data.ownPay.id}`}>Open the slip</Link>
+            </p>
           ) : (
-            <p>No payroll run has been prepared.</p>
+            <p>{me.user.role === "admin" ? "No payroll run has been prepared." : "Your payslips appear here after a month is paid."}</p>
           )}
         </section>
         <section className="card">

@@ -58,8 +58,10 @@ export function Person() {
         <Fact label="City" value={person.city || "—"} />
         <Fact label="Joined" value={prettyDate(person.hireDate)} />
         <Fact label="Type" value={statusLabel(person.employmentType)} />
-        <Fact label="PAN" value={person.panMasked || "—"} />
-        <Fact label="Bank" value={person.bankLast4 ? `${person.bankName} ····${person.bankLast4}` : "—"} />
+        {person.panMasked != null ? <Fact label="PAN" value={person.panMasked || "—"} /> : null}
+        {person.bankName != null || person.bankLast4 != null ? (
+          <Fact label="Bank" value={person.bankLast4 ? `${person.bankName} ····${person.bankLast4}` : person.bankName || "—"} />
+        ) : null}
         <Fact label="Exit" value={person.exitDate ? prettyDate(person.exitDate) : "—"} />
       </div>
 
