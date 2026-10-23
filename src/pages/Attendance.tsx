@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { ApiError, api } from "../api";
 import { useAuth } from "../auth";
-import { prettyDate, statusLabel } from "../format";
+import { PunchCard } from "../components/PunchCard";
+import { kolkataTime, prettyDate, statusLabel } from "../format";
 import type { Employee } from "../types";
 
-type Entry = { employee: Employee; status: string | null };
+type Point = { at: string; distanceM: number };
+type Entry = { employee: Employee; status: string | null; checkIn: Point | null; checkOut: Point | null };
 type Board = { date: string; workingDay: boolean; holidayName: string | null; entries: Entry[] };
 
 const options = ["present", "wfh", "half_day", "leave", "absent"];
@@ -22,17 +24,20 @@ export function Attendance() {
     if (me && !date) setDate(me.today);
   }, [me, date]);
 
-  useEffect(() => {
-    if (!date) return;
-    api<Board>(`/api/attendance?date=${date}`)
+  function load(nextDate = date) {
+    if (!nextDate) return;
+    api<Board>(`/api/attendance?date=${nextDate}`)
       .then((data) => {
         setBoard(data);
         const next: Record<number, string> = {};
         for (const entry of data.entries) next[entry.employee.id] = entry.status ?? "";
         setDraft(next);
-        setNotice("");
       })
       .catch((caught) => setError(caught.message));
+  }
+
+  useEffect(() => {
+    load(date);
   }, [date]);
 
   async function save() {
@@ -82,6 +87,7 @@ export function Attendance() {
           <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
         </label>
       </header>
+      <PunchCard onPunched={() => load(date)} />
       <div className="chips">
         <span>{counts.present} present</span>
         <span>{counts.absent} absent</span>
@@ -95,6 +101,8 @@ export function Attendance() {
             <tr>
               <th>Person</th>
               <th>Department</th>
+              <th>In</th>
+              <th>Out</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -106,6 +114,8 @@ export function Attendance() {
                   <small>{entry.employee.code}</small>
                 </td>
                 <td>{entry.employee.department}</td>
+                <td>{entry.checkIn ? kolkataTime(entry.checkIn.at) : "—"}</td>
+                <td>{entry.checkOut ? kolkataTime(entry.checkOut.at) : "—"}</td>
                 <td>
                   {me.user.role === "manager" ? (
                     statusLabel(entry.status || "unmarked")

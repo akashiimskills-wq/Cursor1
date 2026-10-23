@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { buildRun, employeesInPayroll, getDb, holidayDates, structureFromRow, writePayslips } from "./db.mjs";
+import { distanceMetres } from "./geo.mjs";
 import { businessDaysInRange, businessToday, isWeekend } from "./payroll.mjs";
 
 export const COMPANY = {
@@ -14,9 +15,10 @@ const EMPLOYEE_STATUSES = new Set(["active", "on_leave", "exited"]);
 const EMPLOYMENT_TYPES = new Set(["full_time", "contract"]);
 
 export class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, details = null) {
     super(message);
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -33,7 +35,7 @@ export function handle({ method, path, query = {}, body = null, cookie = "" }) {
     }
     throw new HttpError(404, "Not found.");
   } catch (error) {
-    if (error instanceof HttpError) return { status: error.status, json: { error: error.message } };
+    if (error instanceof HttpError) return { status: error.status, json: { error: error.message, ...(error.details ?? {}) } };
     if (String(error.message).includes("UNIQUE")) {
       return { status: 409, json: { error: "That record already exists." } };
     }
@@ -89,6 +91,8 @@ const routes = [
   { method: "PATCH", path: /^\/api\/employees\/(\d+)$/, handler: patchEmployee },
   { method: "PUT", path: /^\/api\/employees\/(\d+)\/compensation$/, handler: putCompensation },
   { method: "GET", path: "/api/attendance", handler: getAttendance },
+  { method: "GET", path: "/api/attendance/punch", handler: getPunch },
+  { method: "POST", path: "/api/attendance/punch", handler: postPunch },
   { method: "PUT", path: "/api/attendance", handler: putAttendance },
   { method: "GET", path: "/api/leave/meta", handler: leaveMeta },
   { method: "GET", path: "/api/leave/requests", handler: listLeave },
@@ -454,10 +458,115 @@ function getAttendance({ db, user, query }) {
   const marks = new Map(
     db.prepare("SELECT employee_id, status FROM attendance WHERE work_date = ?").all(date).map((row) => [row.employee_id, row.status]),
   );
+  const punches = new Map();
+  for (const row of db.prepare("SELECT employee_id, action, punched_at, distance_m FROM punches WHERE work_date = ? ORDER BY id").all(date)) {
+    const current = punches.get(row.employee_id) ?? { checkIn: null, checkOut: null };
+    const point = { at: row.punched_at, distanceM: row.distance_m };
+    if (row.action === "in") current.checkIn = point;
+    if (row.action === "out") current.checkOut = point;
+    punches.set(row.employee_id, current);
+  }
   const entries = rows
     .filter((row) => user.role !== "employee" || row.id === user.employee_id)
-    .map((row) => ({ employee: publicEmployee(row, user), status: marks.get(row.id) ?? null }));
+    .map((row) => {
+      const punch = punches.get(row.id) ?? { checkIn: null, checkOut: null };
+      return { employee: publicEmployee(row, user), status: marks.get(row.id) ?? null, ...punch };
+    });
   return { date, workingDay: !isWeekend(date) && !holiday, holidayName: holiday?.name ?? null, entries };
+}
+
+function getPunch({ db, user }) {
+  requireUser(user);
+  return punchState(db, user);
+}
+
+function postPunch({ db, user, body }) {
+  const current = requireUser(user);
+  const action = body?.action;
+  if (action !== "in" && action !== "out") throw new HttpError(400, "Punch must be in or out.");
+  const employee = db.prepare("SELECT id, status FROM employees WHERE id = ?").get(current.employee_id);
+  if (!employee || employee.status !== "active") throw new HttpError(403, "Only an active person can punch.");
+  const latitude = Number(body?.latitude);
+  const longitude = Number(body?.longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    throw new HttpError(400, "A latitude and longitude are required.");
+  }
+  const accuracy = body?.accuracy == null || body.accuracy === "" ? null : Number(body.accuracy);
+  if (accuracy != null && (!Number.isFinite(accuracy) || accuracy < 0)) throw new HttpError(400, "Accuracy must be a positive number of metres.");
+  const site = siteRow(db);
+  if (accuracy != null && accuracy > site.radiusM) {
+    throw new HttpError(400, `This location fix is ${Math.round(accuracy)} m wide, broader than the ${site.radiusM} m studio fence.`);
+  }
+  const today = businessToday();
+  const existing = db.prepare("SELECT action FROM punches WHERE employee_id = ? AND work_date = ?").all(current.employee_id, today);
+  const checkedIn = existing.some((row) => row.action === "in");
+  const checkedOut = existing.some((row) => row.action === "out");
+  if (action === "out" && !checkedIn) throw new HttpError(409, "Check in before checking out.");
+  if (action === "in" && checkedIn) throw new HttpError(409, "You are already checked in today.");
+  if (action === "out" && checkedOut) throw new HttpError(409, "You are already checked out today.");
+  const attendance = db.prepare("SELECT status FROM attendance WHERE employee_id = ? AND work_date = ?").get(current.employee_id, today);
+  if (action === "in" && attendance?.status === "leave") {
+    throw new HttpError(409, "Leave is already on the register for today.");
+  }
+  const distanceM = distanceMetres(site.latitude, site.longitude, latitude, longitude);
+  const waived = attendance?.status === "wfh";
+  if (!waived && distanceM > site.radiusM) {
+    throw new HttpError(400, `You are ${formatDistance(distanceM)} from ${site.name}. Punches are accepted within ${site.radiusM} m.`, {
+      distanceM,
+      radiusM: site.radiusM,
+    });
+  }
+  const punchedAt = new Date().toISOString();
+  db.exec("BEGIN");
+  try {
+    db.prepare(
+      `INSERT INTO punches (employee_id, work_date, action, punched_at, latitude, longitude, accuracy_m, distance_m)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(current.employee_id, today, action, punchedAt, latitude, longitude, accuracy, distanceM);
+    if (action === "in" && attendance?.status !== "wfh" && attendance?.status !== "half_day") {
+      db.prepare(
+        `INSERT INTO attendance (employee_id, work_date, status) VALUES (?, ?, 'present')
+         ON CONFLICT(employee_id, work_date) DO UPDATE SET status = 'present'`,
+      ).run(current.employee_id, today);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return punchState(db, current);
+}
+
+function punchState(db, user) {
+  const today = businessToday();
+  const site = siteRow(db);
+  const rows = db
+    .prepare(
+      `SELECT action, punched_at AS at, distance_m AS distanceM
+       FROM punches WHERE employee_id = ? AND work_date = ? ORDER BY id`,
+    )
+    .all(user.employee_id, today);
+  const attendance = db.prepare("SELECT status FROM attendance WHERE employee_id = ? AND work_date = ?").get(user.employee_id, today);
+  return {
+    site,
+    today,
+    status: attendance?.status ?? null,
+    checkIn: rows.find((row) => row.action === "in") ?? null,
+    checkOut: rows.find((row) => row.action === "out") ?? null,
+  };
+}
+
+function siteRow(db) {
+  const site = db
+    .prepare("SELECT name, address, latitude, longitude, radius_m AS radiusM FROM sites ORDER BY id LIMIT 1")
+    .get();
+  if (!site) throw new HttpError(500, "No studio fence is configured.");
+  return site;
+}
+
+function formatDistance(metres) {
+  if (metres < 1000) return `${metres} m`;
+  return `${(metres / 1000).toFixed(1)} km`;
 }
 
 function putAttendance({ db, user, body }) {

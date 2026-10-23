@@ -24,6 +24,7 @@ export function openDatabase(path) {
   `);
   migrate(database);
   seedIfEmpty(database);
+  ensureSite(database);
   return database;
 }
 
@@ -138,6 +139,27 @@ function migrate(db) {
       PRIMARY KEY (employee_id, work_date)
     );
 
+    CREATE TABLE IF NOT EXISTS sites (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      address TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      radius_m INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS punches (
+      id INTEGER PRIMARY KEY,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      work_date TEXT NOT NULL,
+      action TEXT NOT NULL CHECK (action IN ('in', 'out')),
+      punched_at TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      accuracy_m REAL,
+      distance_m INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS holidays (
       id INTEGER PRIMARY KEY,
       holiday_date TEXT NOT NULL UNIQUE,
@@ -188,6 +210,14 @@ function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
   const hash = scryptSync(password, salt, 32).toString("hex");
   return { salt, hash };
+}
+
+function ensureSite(db) {
+  const existing = db.prepare("SELECT id FROM sites LIMIT 1").get();
+  if (existing) return;
+  db.prepare(
+    "INSERT INTO sites (name, address, latitude, longitude, radius_m) VALUES (?, ?, ?, ?, ?)",
+  ).run("Park Street studio", "18 Park Street, Kolkata 700016", 22.5531, 88.3517, 150);
 }
 
 function seedIfEmpty(db) {

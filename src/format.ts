@@ -81,6 +81,32 @@ export function monthLabel(year: number, month: number): string {
   return `${name} ${year}`;
 }
 
+export function kolkataTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(iso));
+}
+
+export function kolkataClock(date: Date): { hours: string; seconds: string } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return { hours: `${pick("hour")}:${pick("minute")}`, seconds: pick("second") };
+}
+
+export function metres(value: number): string {
+  if (value < 1000) return `${value} m`;
+  return `${(value / 1000).toFixed(1)} km`;
+}
+
 export function prettyDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-IN", {

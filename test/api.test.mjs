@@ -245,6 +245,70 @@ test("September payroll matches the engine, and a draft can be approved and paid
   assert.match(csv.csv, /People & Payroll/);
 });
 
+test("studio punches stay inside the Park Street fence", () => {
+  const leela = signIn("leela.nair@meridian.example");
+  const outside = call("POST", "/api/attendance/punch", {
+    cookie: leela,
+    body: { action: "in", latitude: 22.572, longitude: 88.3517, accuracy: 20 },
+  });
+  assert.equal(outside.status, 400);
+  assert.ok(outside.json.distanceM > 150);
+  assert.match(outside.json.error, /Park Street studio/);
+
+  const vague = call("POST", "/api/attendance/punch", {
+    cookie: leela,
+    body: { action: "in", latitude: 22.5534, longitude: 88.3517, accuracy: 400 },
+  });
+  assert.equal(vague.status, 400);
+  assert.match(vague.json.error, /broader than/);
+
+  const inside = call("POST", "/api/attendance/punch", {
+    cookie: leela,
+    body: { action: "in", latitude: 22.5534, longitude: 88.3517, accuracy: 18 },
+  });
+  assert.equal(inside.status, 200, JSON.stringify(inside.json));
+  assert.ok(inside.json.checkIn.distanceM <= 150);
+  assert.equal(inside.json.checkOut, null);
+  assert.equal(inside.json.status, "present");
+  assert.equal(call("POST", "/api/attendance/punch", {
+    cookie: leela,
+    body: { action: "in", latitude: 22.5534, longitude: 88.3517, accuracy: 18 },
+  }).status, 409);
+
+  const farOut = call("POST", "/api/attendance/punch", {
+    cookie: leela,
+    body: { action: "out", latitude: 28.6139, longitude: 77.209, accuracy: 15 },
+  });
+  assert.equal(farOut.status, 400);
+
+  const done = call("POST", "/api/attendance/punch", {
+    cookie: leela,
+    body: { action: "out", latitude: 22.5532, longitude: 88.3518, accuracy: 12 },
+  });
+  assert.equal(done.status, 200, JSON.stringify(done.json));
+  assert.ok(done.json.checkOut.at);
+
+  const admin = signIn("priya.shah@meridian.example");
+  const board = call("GET", "/api/attendance", { cookie: admin });
+  const row = board.json.entries.find((entry) => entry.employee.email === "leela.nair@meridian.example");
+  assert.equal(row.status, "present");
+  assert.ok(row.checkIn.at);
+  assert.ok(row.checkOut.at);
+
+  const priya = call("GET", "/api/me", { cookie: admin }).json.user;
+  call("PUT", "/api/attendance", {
+    cookie: admin,
+    body: { date: board.json.date, entries: [{ employeeId: priya.employeeId, status: "wfh" }] },
+  });
+  const remote = call("POST", "/api/attendance/punch", {
+    cookie: admin,
+    body: { action: "in", latitude: 28.6139, longitude: 77.209, accuracy: 25 },
+  });
+  assert.equal(remote.status, 200, JSON.stringify(remote.json));
+  assert.equal(remote.json.status, "wfh");
+  assert.ok(remote.json.checkIn.distanceM > 1000);
+});
+
 test("attendance save and a future payroll month are rejected", () => {
   const admin = signIn("priya.shah@meridian.example");
   const kabir = call("GET", "/api/employees?q=kabir", { cookie: admin }).json.employees[0];

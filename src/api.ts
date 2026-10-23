@@ -1,9 +1,11 @@
 export class ApiError extends Error {
   status: number;
+  distanceM: number | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, distanceM: number | null = null) {
     super(message);
     this.status = status;
+    this.distanceM = distanceM;
   }
 }
 
@@ -16,6 +18,6 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
-  if (!response.ok) throw new ApiError(response.status, data?.error || "Something went wrong.");
+  if (!response.ok) throw new ApiError(response.status, data?.error || "Something went wrong.", data?.distanceM ?? null);
   return data as T;
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { PunchCard } from "../components/PunchCard";
 import { dayCount, inr, monthLabel, prettyDate, statusLabel } from "../format";
 
 type DashboardData = {
@@ -58,6 +59,7 @@ export function Dashboard() {
           Open the register
         </Link>
       </header>
+      <PunchCard layout="strip" />
 
       <section className="stats">
         <article>
