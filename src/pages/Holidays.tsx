@@ -10,10 +10,14 @@ export function Holidays() {
   const [year, setYear] = useState(2026);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
 
   function load(nextYear = year) {
     api<{ holidays: Holiday[] }>(`/api/holidays?year=${nextYear}`)
-      .then((data) => setHolidays(data.holidays))
+      .then((data) => {
+        setHolidays(data.holidays);
+        setLoaded(true);
+      })
       .catch((caught) => setError(caught.message));
   }
 
@@ -88,7 +92,7 @@ export function Holidays() {
           </li>
         ))}
       </ul>
-      {holidays.length === 0 ? <p className="empty">No holidays in {year}.</p> : null}
+      {loaded && holidays.length === 0 ? <p className="empty">No holidays in {year}.</p> : null}
     </div>
   );
 }

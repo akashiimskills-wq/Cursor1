@@ -15,19 +15,20 @@ export function Leave() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [mine, setMine] = useState<LeaveRequest[]>([]);
   const [queue, setQueue] = useState<LeaveRequest[]>([]);
+  const [listsReady, setListsReady] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   function load() {
     api<Meta>("/api/leave/meta").then(setMeta).catch((caught) => setError(caught.message));
-    api<{ requests: LeaveRequest[] }>("/api/leave/requests?scope=mine")
-      .then((data) => setMine(data.requests))
+    const mineRequest = api<{ requests: LeaveRequest[] }>("/api/leave/requests?scope=mine").then((data) => setMine(data.requests));
+    const queueRequest =
+      me && me.user.role !== "employee"
+        ? api<{ requests: LeaveRequest[] }>("/api/leave/requests?scope=queue").then((data) => setQueue(data.requests))
+        : Promise.resolve();
+    Promise.all([mineRequest, queueRequest])
+      .then(() => setListsReady(true))
       .catch((caught) => setError(caught.message));
-    if (me && me.user.role !== "employee") {
-      api<{ requests: LeaveRequest[] }>("/api/leave/requests?scope=queue")
-        .then((data) => setQueue(data.requests))
-        .catch((caught) => setError(caught.message));
-    }
   }
 
   useEffect(() => {
@@ -115,6 +116,7 @@ export function Leave() {
         <section className="card">
           <h2>{me.user.role === "employee" ? "Your requests" : "Waiting on you"}</h2>
           <RequestList
+            ready={listsReady}
             requests={me.user.role === "employee" ? mine : queue}
             canDecide={me.user.role !== "employee"}
             onDecided={(message) => {
@@ -128,7 +130,7 @@ export function Leave() {
       {me.user.role !== "employee" ? (
         <section className="card">
           <h2>Your own requests</h2>
-          <RequestList requests={mine} canDecide={false} onDecided={() => undefined} onError={setError} />
+          <RequestList ready={listsReady} requests={mine} canDecide={false} onDecided={() => undefined} onError={setError} />
         </section>
       ) : null}
     </div>
@@ -136,16 +138,19 @@ export function Leave() {
 }
 
 function RequestList({
+  ready,
   requests,
   canDecide,
   onDecided,
   onError,
 }: {
+  ready: boolean;
   requests: LeaveRequest[];
   canDecide: boolean;
   onDecided: (message: string) => void;
   onError: (message: string) => void;
 }) {
+  if (!ready) return null;
   if (requests.length === 0) return <p className="empty">Nothing here.</p>;
   return (
     <ul className="requests">

@@ -28,10 +28,14 @@ export function Payroll() {
   const [year, setYear] = useState(2026);
   const [month, setMonth] = useState(10);
   const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
 
   function load() {
     api<{ runs: RunSummary[] }>("/api/payroll/runs")
-      .then((data) => setRuns(data.runs))
+      .then((data) => {
+        setRuns(data.runs);
+        setLoaded(true);
+      })
       .catch((caught) => setError(caught.message));
   }
 
@@ -127,7 +131,7 @@ export function Payroll() {
             ))}
           </tbody>
         </table>
-        {runs.length === 0 ? <p className="empty">No payroll runs yet.</p> : null}
+        {loaded && runs.length === 0 ? <p className="empty">No payroll runs yet.</p> : null}
       </div>
     </div>
   );

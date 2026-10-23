@@ -19,6 +19,7 @@ export function People() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   function load() {
     const params = new URLSearchParams();
@@ -26,7 +27,10 @@ export function People() {
     if (departmentId) params.set("departmentId", departmentId);
     if (status) params.set("status", status);
     api<{ employees: Employee[] }>(`/api/employees?${params}`)
-      .then((data) => setEmployees(data.employees))
+      .then((data) => {
+        setEmployees(data.employees);
+        setLoaded(true);
+      })
       .catch((caught) => setError(caught.message));
   }
 
@@ -128,7 +132,8 @@ export function People() {
             ))}
           </tbody>
         </table>
-        {employees.length === 0 ? <p className="empty">No one matches that search.</p> : null}
+        {loaded && employees.length === 0 ? <p className="empty">No one matches that search.</p> : null}
+        {!loaded && !error ? <p className="boot">Opening the directory…</p> : null}
       </div>
       {open ? (
         <AddPerson
