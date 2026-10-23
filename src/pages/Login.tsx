@@ -39,13 +39,13 @@ export function Login() {
         <div>
           <Mark size={36} />
           <p className="eyebrow">Meridian Goods</p>
-          <h1>Marigold HRMS</h1>
-          <p>Employees, attendance, leave, and payroll in one workspace.</p>
+          <h1>The people desk</h1>
+          <p>Directory, geofenced attendance, leave, and payroll for Meridian Goods — one set of books.</p>
           <ul className="login-index">
-            <li>Employee directory</li>
-            <li>Geofenced attendance</li>
-            <li>Leave approvals</li>
-            <li>Payroll and payslips</li>
+            <li>Employee directory and compensation</li>
+            <li>Park Street geofence, 150 metres</li>
+            <li>Leave approvals by manager</li>
+            <li>Payroll through payslip</li>
           </ul>
         </div>
         <p className="letterfoot">

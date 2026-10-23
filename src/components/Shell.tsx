@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { fullName, useAuth } from "../auth";
 import { prettyDate, roleLabel } from "../format";
+import { Avatar } from "./Avatar";
 import { Mark } from "./Mark";
 
 const links = [
@@ -15,18 +17,27 @@ const links = [
 export function Shell() {
   const { me, loading, signOut } = useAuth();
   const navigate = useNavigate();
+  const [query, setQuery] = useState("");
 
   if (loading) return <p className="boot">Opening Marigold…</p>;
   if (!me) return <Navigate to="/login" replace />;
 
   return (
-    <div className="shell">
+    <div className="app-frame">
+      {me.env !== "production" ? (
+        <div className={`env-banner ${me.env}`}>
+          {me.env === "staging"
+            ? "Staging desk — this is a rehearsal copy. Paid books live on production."
+            : "Development desk — this database is the working copy."}
+        </div>
+      ) : null}
+      <div className="shell">
       <aside className="rail">
         <div className="brand">
           <Mark size={28} />
           <div>
             <strong>Marigold</strong>
-            <span>HRMS</span>
+            <span>People desk</span>
           </div>
         </div>
         <nav>
@@ -40,10 +51,13 @@ export function Shell() {
             ))}
         </nav>
         <div className="who">
-          <b>{fullName(me.user)}</b>
-          <span>
-            {me.user.code} · {roleLabel(me.user.role)}
-          </span>
+          <Avatar name={fullName(me.user)} size={36} />
+          <div>
+            <b>{fullName(me.user)}</b>
+            <span>
+              {me.user.code} · {roleLabel(me.user.role)}
+            </span>
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -56,16 +70,37 @@ export function Shell() {
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <div>
-            <strong>{me.company.legalName}</strong>
-            <span>{prettyDate(me.today)}</span>
+          <form
+            className="finder"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const term = query.trim();
+              navigate(term ? `/people?q=${encodeURIComponent(term)}` : "/people");
+            }}
+          >
+            <label className="sr" htmlFor="finder">
+              Find an employee
+            </label>
+            <input
+              id="finder"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Find an employee, code, or email"
+            />
+          </form>
+          <div className="topbar-meta">
+            <span className={`env-chip ${me.env}`}>{me.env}</span>
+            <div>
+              <strong>{me.company.legalName}</strong>
+              <span>{prettyDate(me.today)}</span>
+            </div>
           </div>
-          <span className="topbar-role">{roleLabel(me.user.role)}</span>
         </header>
         <main className="main">
           <Outlet />
         </main>
       </div>
+    </div>
     </div>
   );
 }

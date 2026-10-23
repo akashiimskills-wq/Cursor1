@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { buildRun, employeesInPayroll, getDb, holidayDates, structureFromRow, writePayslips } from "./db.mjs";
 import { distanceMetres } from "./geo.mjs";
-import { businessDaysInRange, businessToday, isWeekend } from "./payroll.mjs";
+import { addDays, businessDaysInRange, businessToday, isWeekend } from "./payroll.mjs";
 
 export const COMPANY = {
   product: "Marigold",
@@ -9,6 +9,27 @@ export const COMPANY = {
   legalName: "Meridian Goods Pvt Ltd",
   address: "18 Park Street, Kolkata 700016",
 };
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+export function releaseEnv() {
+  const value = String(process.env.HRMS_ENV || "development").toLowerCase();
+  if (value === "staging" || value === "production") return value;
+  return "development";
+}
 
 const STATUSES = new Set(["present", "absent", "half_day", "wfh", "leave"]);
 const EMPLOYEE_STATUSES = new Set(["active", "on_leave", "exited"]);
@@ -78,7 +99,7 @@ function requireAdmin(user) {
 }
 
 const routes = [
-  { method: "GET", path: "/api/health", handler: () => ({ ok: true, product: COMPANY.product }) },
+  { method: "GET", path: "/api/health", handler: () => ({ ok: true, product: COMPANY.product, env: releaseEnv() }) },
   { method: "POST", path: "/api/login", handler: login },
   { method: "POST", path: "/api/logout", handler: logout },
   { method: "GET", path: "/api/me", handler: me },
@@ -145,6 +166,7 @@ function mePayload(user) {
     user: publicUser(user),
     company: COMPANY,
     today: businessToday(),
+    env: releaseEnv(),
   };
 }
 
@@ -242,7 +264,128 @@ function dashboard({ db, user }) {
       years: Number(today.slice(0, 4)) - Number(row.hire_date.slice(0, 4)),
     })),
     upcomingHolidays: upcoming,
+    checkedIn: checkedInToday(db, today),
+    week: weekSeries(db, today, activeIds.length),
+    activity: recentActivity(db, user),
+    pipeline:
+      user.role === "admin" && latest
+        ? { status: latest.status, year: latest.year, month: latest.month }
+        : null,
   };
+}
+
+function checkedInToday(db, today) {
+  return db
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM punches p
+       WHERE p.work_date = ? AND p.action = 'in'
+         AND NOT EXISTS (
+           SELECT 1 FROM punches o
+           WHERE o.employee_id = p.employee_id AND o.work_date = p.work_date AND o.action = 'out'
+         )`,
+    )
+    .get(today).count;
+}
+
+function weekSeries(db, today, activeCount) {
+  const dates = [];
+  for (let offset = 6; offset >= 0; offset -= 1) dates.push(addDays(today, -offset));
+  const rows = db
+    .prepare(
+      `SELECT work_date, status, COUNT(*) AS count
+       FROM attendance
+       WHERE work_date >= ? AND work_date <= ?
+       GROUP BY work_date, status`,
+    )
+    .all(dates[0], today);
+  const holidays = new Map(
+    db
+      .prepare("SELECT holiday_date, name FROM holidays WHERE holiday_date >= ? AND holiday_date <= ?")
+      .all(dates[0], today)
+      .map((row) => [row.holiday_date, row.name]),
+  );
+  const byDate = new Map();
+  for (const row of rows) {
+    if (!byDate.has(row.work_date)) byDate.set(row.work_date, {});
+    byDate.get(row.work_date)[row.status] = row.count;
+  }
+  const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return dates.map((date) => {
+    const counts = byDate.get(date) ?? {};
+    const holidayName = holidays.get(date) ?? null;
+    const closed = isWeekend(date) || Boolean(holidayName);
+    const marked = Object.values(counts).reduce((sum, count) => sum + count, 0);
+    const [year, month, day] = date.split("-").map(Number);
+    return {
+      date,
+      label: labels[new Date(Date.UTC(year, month - 1, day)).getUTCDay()],
+      present: (counts.present ?? 0) + (counts.wfh ?? 0) + (counts.half_day ?? 0) + (counts.leave ?? 0),
+      absent: counts.absent ?? 0,
+      unmarked: closed ? 0 : Math.max(0, activeCount - marked),
+      closed,
+      holidayName,
+    };
+  });
+}
+
+function recentActivity(db, user) {
+  const items = [];
+  for (const row of db
+    .prepare(
+      `SELECT p.punched_at AS at, p.action, p.distance_m, e.first_name, e.last_name, e.code
+       FROM punches p JOIN employees e ON e.id = p.employee_id
+       ORDER BY p.punched_at DESC LIMIT 5`,
+    )
+    .all()) {
+    items.push({
+      at: row.at,
+      kind: "punch",
+      title: `${row.first_name} ${row.last_name} checked ${row.action === "in" ? "in" : "out"}`,
+      detail: `${row.code} · ${row.distance_m} m from the studio`,
+    });
+  }
+
+  const leaveParams = [];
+  let leaveWhere = "";
+  if (user.role === "employee") {
+    leaveWhere = "WHERE r.employee_id = ?";
+    leaveParams.push(user.employee_id);
+  } else if (user.role === "manager") {
+    leaveWhere = "WHERE r.employee_id = ? OR e.manager_id = ?";
+    leaveParams.push(user.employee_id, user.employee_id);
+  }
+  for (const row of db
+    .prepare(
+      `SELECT r.status, r.start_date, r.end_date, r.reviewed_at, r.days, e.first_name, e.last_name, t.name AS leave_type
+       FROM leave_requests r
+       JOIN employees e ON e.id = r.employee_id
+       JOIN leave_types t ON t.id = r.leave_type_id
+       ${leaveWhere}
+       ORDER BY COALESCE(r.reviewed_at, r.start_date) DESC, r.id DESC
+       LIMIT 5`,
+    )
+    .all(...leaveParams)) {
+    items.push({
+      at: row.reviewed_at || `${row.start_date}T00:00:00.000Z`,
+      kind: "leave",
+      title: `${row.first_name} ${row.last_name} · ${row.leave_type} ${row.status}`,
+      detail: `${row.start_date} to ${row.end_date} · ${row.days} day${row.days === 1 ? "" : "s"}`,
+    });
+  }
+
+  if (user.role === "admin") {
+    for (const row of db.prepare("SELECT year, month, status, created_at, paid_at FROM payroll_runs ORDER BY year DESC, month DESC LIMIT 2").all()) {
+      items.push({
+        at: row.paid_at || row.created_at,
+        kind: "payroll",
+        title: `${MONTHS[row.month - 1]} ${row.year} payroll is ${row.status}`,
+        detail: row.status === "paid" ? "Salaries marked paid" : "Waiting on the payroll desk",
+      });
+    }
+  }
+
+  return items.sort((left, right) => String(right.at).localeCompare(String(left.at))).slice(0, 8);
 }
 
 function departments({ db, user }) {

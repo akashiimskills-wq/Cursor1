@@ -33,3 +33,13 @@ npm run typecheck
 ```
 
 The database is created at `data/marigold.sqlite` on first launch. Set `HRMS_DB` to use another file. `npm start` serves a production build from `dist/` after `npm run build`.
+
+`HRMS_ENV` is `development`, `staging`, or `production`. It is returned by `/api/health` and shown in the desk. Anything else is treated as development.
+
+```bash
+npm run release
+```
+
+That runs the tests, typecheck, and production build, then boots a staging desk on port 4181 (`data/staging.sqlite`) and, only after that smoke passes, a production desk on port 4182 (`data/production.sqlite`). Both stay running on this machine. There is no external host: production here is that local process, not a public URL.
+
+GitHub Actions repeats the same order: tests, then a staging smoke, then a production smoke. The production job does not publish anywhere.

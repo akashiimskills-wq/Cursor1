@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ApiError, api } from "../api";
 import { useAuth } from "../auth";
+import { Avatar } from "../components/Avatar";
 import { Modal } from "../components/Modal";
 import { prettyDate, statusLabel } from "../format";
 import type { Employee } from "../types";
@@ -14,7 +15,9 @@ export function People() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
-  const [query, setQuery] = useState("");
+  const [params, setParams] = useSearchParams();
+  const query = params.get("q") ?? "";
+  const [draft, setDraft] = useState(query);
   const [departmentId, setDepartmentId] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -22,11 +25,11 @@ export function People() {
   const [loaded, setLoaded] = useState(false);
 
   function load() {
-    const params = new URLSearchParams();
-    if (query.trim()) params.set("q", query.trim());
-    if (departmentId) params.set("departmentId", departmentId);
-    if (status) params.set("status", status);
-    api<{ employees: Employee[] }>(`/api/employees?${params}`)
+    const search = new URLSearchParams();
+    if (query.trim()) search.set("q", query.trim());
+    if (departmentId) search.set("departmentId", departmentId);
+    if (status) search.set("status", status);
+    api<{ employees: Employee[] }>(`/api/employees?${search}`)
       .then((data) => {
         setEmployees(data.employees);
         setLoaded(true);
@@ -35,8 +38,12 @@ export function People() {
   }
 
   useEffect(() => {
+    setDraft(query);
+  }, [query]);
+
+  useEffect(() => {
     load();
-  }, [departmentId, status]);
+  }, [query, departmentId, status]);
 
   useEffect(() => {
     api<{ departments: Department[] }>("/api/departments").then((data) => setDepartments(data.departments));
@@ -50,7 +57,7 @@ export function People() {
       <header className="page-head">
         <div>
           <p className="eyebrow">Directory</p>
-          <h1>People</h1>
+          <h1>Employees</h1>
           <p className="lede">Everyone on the Meridian books, with the role that drives their starting salary.</p>
         </div>
         {me?.user.role === "admin" ? (
@@ -63,14 +70,18 @@ export function People() {
         className="filters"
         onSubmit={(event) => {
           event.preventDefault();
-          load();
+          const next = new URLSearchParams(params);
+          const term = draft.trim();
+          if (term) next.set("q", term);
+          else next.delete("q");
+          setParams(next);
         }}
       >
         <label>
           Search
           <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
             placeholder="Name, email, or code"
             aria-label="Search people"
           />
@@ -114,12 +125,17 @@ export function People() {
             {employees.map((person) => (
               <tr key={person.id}>
                 <td>
-                  <Link to={`/people/${person.id}`}>
-                    {person.firstName} {person.lastName}
-                  </Link>
-                  <small>
-                    {person.code} · {person.city || "—"}
-                  </small>
+                  <div className="person-cell">
+                    <Avatar name={`${person.firstName} ${person.lastName}`} />
+                    <div>
+                      <Link to={`/people/${person.id}`}>
+                        {person.firstName} {person.lastName}
+                      </Link>
+                      <small>
+                        {person.code} · {person.city || "—"}
+                      </small>
+                    </div>
+                  </div>
                 </td>
                 <td>{person.title}</td>
                 <td>{person.department}</td>

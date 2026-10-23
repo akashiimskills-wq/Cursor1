@@ -21,6 +21,7 @@ export type Me = {
   user: SessionUser;
   company: Company;
   today: string;
+  env: "development" | "staging" | "production";
 };
 
 export type Employee = {

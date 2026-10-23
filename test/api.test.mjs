@@ -37,11 +37,14 @@ function signIn(email) {
 }
 
 test("health and login", () => {
-  assert.equal(call("GET", "/api/health").json.ok, true);
+  const health = call("GET", "/api/health").json;
+  assert.equal(health.ok, true);
+  assert.equal(health.env, "development");
   const admin = signIn("priya.shah@meridian.example");
   const me = call("GET", "/api/me", { cookie: admin });
   assert.equal(me.json.user.role, "admin");
   assert.equal(me.json.company.name, "Meridian Goods");
+  assert.equal(me.json.env, "development");
   const bad = call("POST", "/api/login", { body: { email: "priya.shah@meridian.example", password: "nope" } });
   assert.equal(bad.status, 401);
 });
@@ -52,6 +55,11 @@ test("dashboard, people search, and salary privacy", () => {
   assert.equal(dashboard.status, 200);
   assert.equal(dashboard.json.headcount, 10);
   assert.ok(dashboard.json.payroll.net > 0);
+  assert.equal(dashboard.json.week.length, 7);
+  assert.equal(typeof dashboard.json.checkedIn, "number");
+  assert.equal(dashboard.json.pipeline.status, "paid");
+  assert.ok(dashboard.json.activity.some((item) => item.kind === "payroll"));
+  assert.ok(dashboard.json.activity.every((item) => item.kind !== "payroll" || !String(item.detail).includes("₹")));
 
   const found = call("GET", "/api/employees?q=leela", { cookie: admin });
   assert.equal(found.json.employees.length, 1);
@@ -72,6 +80,9 @@ test("dashboard, people search, and salary privacy", () => {
   assert.equal(hidden.json.employee.bankName, null);
   const employeeDash = call("GET", "/api/dashboard", { cookie: employee });
   assert.equal(employeeDash.json.payroll, null);
+  assert.equal(employeeDash.json.pipeline, null);
+  assert.ok(employeeDash.json.activity.every((item) => item.kind !== "payroll"));
+  assert.equal(employeeDash.json.week.length, 7);
   assert.ok(employeeDash.json.ownPay.net > 0);
   assert.equal(call("GET", "/api/payroll/runs", { cookie: employee }).status, 403);
 });
@@ -320,4 +331,16 @@ test("attendance save and a future payroll month are rejected", () => {
   assert.equal(saved.json.entries.find((entry) => entry.employee.id === kabir.id).status, "wfh");
   const future = call("POST", "/api/payroll/runs", { cookie: admin, body: { year: 2027, month: 1 } });
   assert.equal(future.status, 400);
+});
+
+test("health reports staging and production desks", () => {
+  const previous = process.env.HRMS_ENV;
+  process.env.HRMS_ENV = "staging";
+  assert.equal(call("GET", "/api/health").json.env, "staging");
+  process.env.HRMS_ENV = "production";
+  assert.equal(call("GET", "/api/health").json.env, "production");
+  process.env.HRMS_ENV = "lab";
+  assert.equal(call("GET", "/api/health").json.env, "development");
+  if (previous === undefined) delete process.env.HRMS_ENV;
+  else process.env.HRMS_ENV = previous;
 });

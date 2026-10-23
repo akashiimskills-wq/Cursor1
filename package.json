@@ -8,7 +8,8 @@
     "start": "node --disable-warning=ExperimentalWarning server/index.mjs",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 test/*.test.mjs"
+    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 test/*.test.mjs",
+    "release": "node --disable-warning=ExperimentalWarning scripts/release.mjs"
   },
   "dependencies": {
     "react": "^19.3.1",

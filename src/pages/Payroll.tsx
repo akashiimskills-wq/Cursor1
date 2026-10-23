@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, api } from "../api";
 import { useAuth } from "../auth";
+import { Pipeline } from "../components/Pipeline";
 import { dayCount, inr, monthLabel, statusLabel } from "../format";
 import type { Payslip } from "../types";
 
@@ -63,6 +64,18 @@ export function Payroll() {
         </div>
       </header>
       {error ? <p className="banner">{error}</p> : null}
+      {runs[0] ? (
+        <section className="card pipeline-card">
+          <div className="card-head">
+            <h2>{monthLabel(runs[0].year, runs[0].month)}</h2>
+            <Link to={`/payroll/${runs[0].id}`}>Open the latest run</Link>
+          </div>
+          <Pipeline status={runs[0].status} />
+          <p className="pipeline-note">
+            {runs[0].people} people · gross {inr(runs[0].gross)} · net {inr(runs[0].net)}. A run moves from draft to approved, then to paid.
+          </p>
+        </section>
+      ) : null}
       <form
         className="filters"
         onSubmit={async (event) => {
