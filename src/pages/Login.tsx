@@ -36,17 +36,28 @@ export function Login() {
   return (
     <div className="login">
       <section className="login-story">
-        <Mark size={54} />
-        <p className="eyebrow">Meridian Goods · Kolkata</p>
-        <h1>Pay people properly.</h1>
-        <p>
-          Marigold keeps the studio’s people, attendance, leave, and monthly payroll in one set of books. Salaries,
-          provident fund, professional tax, and estimated TDS are calculated from the register, not from a spreadsheet.
+        <div>
+          <Mark size={36} />
+          <p className="eyebrow">Park Street · Kolkata</p>
+          <h1>Marigold</h1>
+          <p>The payroll book for Meridian Goods. People, time, leave, and pay, in one register.</p>
+          <ol className="login-index">
+            <li><span>01</span> Directory</li>
+            <li><span>02</span> Attendance</li>
+            <li><span>03</span> Leave</li>
+            <li><span>04</span> Payroll</li>
+          </ol>
+        </div>
+        <p className="letterfoot">
+          Meridian Goods Pvt Ltd
+          <br />
+          18 Park Street, Kolkata 700016
         </p>
       </section>
       <section className="login-panel">
+        <p className="eyebrow">Desk</p>
         <h2>Sign in</h2>
-        <p className="lede">The sample password for every desk is marigold-demo.</p>
+        <p className="lede">Sample password for every desk: marigold-demo.</p>
         <div className="desks">
           {desks.map((desk) => (
             <button

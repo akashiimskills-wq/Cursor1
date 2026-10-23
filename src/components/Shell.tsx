@@ -26,7 +26,7 @@ export function Shell() {
           <Mark />
           <div>
             <strong>Marigold</strong>
-            <span>{me.company.name}</span>
+            <span>{me.company.legalName}</span>
           </div>
         </div>
         <nav>

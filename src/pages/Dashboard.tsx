@@ -41,7 +41,7 @@ export function Dashboard() {
       <header className="page-head">
         <div>
           <p className="eyebrow">{prettyDate(data.today)}</p>
-          <h1>Good day, {me.user.firstName}.</h1>
+          <h1>{me.company.name}</h1>
           <p className="lede">
             {data.holidayName
               ? `${data.holidayName} — the studio is closed.`
