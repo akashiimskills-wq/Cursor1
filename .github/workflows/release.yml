@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
+  staging:
+    name: Staging
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Smoke the staging desk
+        env:
+          HRMS_ENV: staging
+          HRMS_DB: data/staging.sqlite
+          PORT: 4181
+        run: node --disable-warning=ExperimentalWarning scripts/smoke.mjs
+
+  production:
+    name: Production
+    needs: staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Smoke the production desk
+        env:
+          HRMS_ENV: production
+          HRMS_DB: data/production.sqlite
+          PORT: 4182
+        run: node --disable-warning=ExperimentalWarning scripts/smoke.mjs
